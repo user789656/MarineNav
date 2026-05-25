@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>COLREG Decision System - Визуализация расхождения судов</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚢 COLREG Decision System</h1>
+            <p class="subtitle">Система принятия решений для расхождения судов по МППСС-72</p>
+        </header>
+
+        <div class="main-content">
+            <!-- Панель управления -->
+            <aside class="control-panel">
+                <h2>⚙️ Параметры своего судна</h2>
+                
+                <div class="form-group">
+                    <label for="own-lat">Широта (lat):</label>
+                    <input type="number" id="own-lat" step="0.0001" value="44.6167" />
+                </div>
+                
+                <div class="form-group">
+                    <label for="own-lon">Долгота (lon):</label>
+                    <input type="number" id="own-lon" step="0.0001" value="33.5333" />
+                </div>
+                
+                <div class="form-group">
+                    <label for="own-speed">Скорость (узлы):</label>
+                    <input type="number" id="own-speed" step="0.1" value="12" />
+                </div>
+                
+                <div class="form-group">
+                    <label for="own-course">Курс (градусы):</label>
+                    <input type="number" id="own-course" step="1" value="0" min="0" max="359" />
+                </div>
+                
+                <div class="form-group">
+                    <label for="vessel-type">Тип судна:</label>
+                    <select id="vessel-type">
+                        <option value="power_driven">С механическим двигателем</option>
+                        <option value="sailing">Парусное</option>
+                        <option value="fishing">Занятое ловом рыбы</option>
+                        <option value="nuc">NUC (лишенное возможности управляться)</option>
+                        <option value="ram">RAM (ограниченное в возможности маневрировать)</option>
+                        <option value="cbd">CBD (стесненное осадкой)</option>
+                    </select>
+                </div>
+
+                <button id="btn-update" class="btn btn-primary">🔄 Обновить ситуацию</button>
+                <button id="btn-scenario-headon" class="btn btn-secondary">🎯 Сценарий: Лоб в лоб</button>
+                <button id="btn-scenario-crossing" class="btn btn-secondary">🎯 Сценарий: Пересечение</button>
+                <button id="btn-scenario-overtaking" class="btn btn-secondary">🎯 Сценарий: Обгон</button>
+                
+                <div class="checkbox-group">
+                    <label>
+                        <input type="checkbox" id="limited-visibility" />
+                        Ограниченная видимость
+                    </label>
+                </div>
+            </aside>
+
+            <!-- Карта -->
+            <main class="map-container">
+                <div id="map"></div>
+                
+                <!-- Легенда -->
+                <div class="legend">
+                    <h3>📍 Условные обозначения</h3>
+                    <div class="legend-item">
+                        <span class="legend-icon own-ship">▲</span>
+                        <span>Ваше судно</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-icon target-ship">●</span>
+                        <span>Целевое судно</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-icon trajectory">→</span>
+                        <span>Траектория движения</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-icon danger-zone">◐</span>
+                        <span>Зона опасности</span>
+                    </div>
+                </div>
+            </main>
+
+            <!-- Панель информации -->
+            <aside class="info-panel">
+                <h2>📊 Анализ ситуации</h2>
+                
+                <div id="situation-summary" class="summary-box">
+                    <p>Загрузите данные для анализа...</p>
+                </div>
+
+                <div id="warnings-container" class="warnings-container"></div>
+
+                <h3>🎯 Рекомендованные действия</h3>
+                <div id="actions-container" class="actions-container"></div>
+
+                <h3>🔊 Сигналы</h3>
+                <div id="signals-container" class="signals-container"></div>
+
+                <h3>📋 Детали по судам</h3>
+                <div id="vessels-details" class="vessels-details"></div>
+            </aside>
+        </div>
+    </div>
+
+    <script src="/static/js/map.js"></script>
+</body>
+</html>

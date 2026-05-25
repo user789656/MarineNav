@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>COLREG-72 Decision Module - Vessel Encounter Visualization</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚢 COLREG-72 Collision Avoidance System</h1>
+            <p class="subtitle">International Regulations for Preventing Collisions at Sea</p>
+        </header>
+
+        <div class="main-content">
+            <div class="map-container">
+                <div id="map"></div>
+                <div class="legend">
+                    <h3>Vessel Types</h3>
+                    <div class="legend-item">
+                        <span class="vessel-icon own-vessel">●</span> Own Vessel
+                    </div>
+                    <div class="legend-item">
+                        <span class="vessel-icon power-driven">●</span> Power-driven
+                    </div>
+                    <div class="legend-item">
+                        <span class="vessel-icon sailing">●</span> Sailing
+                    </div>
+                    <div class="legend-item">
+                        <span class="vessel-icon fishing">●</span> Fishing
+                    </div>
+                    <div class="legend-item">
+                        <span class="vessel-icon nuc">●</span> NUC
+                    </div>
+                    <div class="legend-item">
+                        <span class="vessel-icon ram">●</span> RAM
+                    </div>
+                    
+                    <h3>Risk Levels</h3>
+                    <div class="legend-item">
+                        <span class="risk-indicator high">●</span> High Risk
+                    </div>
+                    <div class="legend-item">
+                        <span class="risk-indicator medium">●</span> Medium Risk
+                    </div>
+                    <div class="legend-item">
+                        <span class="risk-indicator low">●</span> Low Risk
+                    </div>
+                    <div class="legend-item">
+                        <span class="risk-indicator none">●</span> No Risk
+                    </div>
+                </div>
+            </div>
+
+            <div class="info-panel">
+                <div class="panel-section">
+                    <h2>📊 Situation Overview</h2>
+                    <div id="situation-overview">
+                        <div class="stat-card">
+                            <span class="stat-label">Own Speed</span>
+                            <span class="stat-value" id="own-speed">-- kn</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-label">Own Course</span>
+                            <span class="stat-value" id="own-course">--°</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-label">Targets</span>
+                            <span class="stat-value" id="target-count">0</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-label">High Risk</span>
+                            <span class="stat-value risk-high" id="high-risk-count">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel-section">
+                    <h2>⚠️ Collision Risks</h2>
+                    <div id="risk-list" class="risk-list">
+                        <p class="no-data">No collision risks detected</p>
+                    </div>
+                </div>
+
+                <div class="panel-section">
+                    <h2>🎯 Recommended Actions</h2>
+                    <div id="actions-list" class="actions-list">
+                        <p class="no-data">No actions required</p>
+                    </div>
+                </div>
+
+                <div class="panel-section">
+                    <h2>🔔 Signals</h2>
+                    <div id="signals-list" class="signals-list">
+                        <p class="no-data">No signals required</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="scenario-controls">
+            <h2>🎮 Select Scenario</h2>
+            <div class="scenario-buttons">
+                <button onclick="loadScenario('headon')" class="scenario-btn">Head-On Situation</button>
+                <button onclick="loadScenario('crossing')" class="scenario-btn">Crossing Situation</button>
+                <button onclick="loadScenario('overtaking')" class="scenario-btn">Overtaking Situation</button>
+                <button onclick="loadScenario('multiple')" class="scenario-btn">Multiple Targets</button>
+                <button onclick="loadScenario('fishing')" class="scenario-btn">Fishing Vessel</button>
+            </div>
+        </div>
+
+        <footer>
+            <p>COLREG-72 Decision Module v1.0 | Based on International Maritime Organization Regulations</p>
+        </footer>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

@@ -125,6 +125,7 @@ def scenario_fishing():
     print_separator("SCENARIO 3: Fishing Vessel Encounter (Rule 18)")
     
     own_vessel = OwnVessel(
+        vessel_id="OWN_FISHING",
         lat=51.5000, lon=-0.1000,
         course=0, speed=12,
         vessel_type=VesselType.POWER_DRIVEN
@@ -169,6 +170,7 @@ def scenario_multiple():
     print_separator("SCENARIO 4: Multiple Targets")
     
     own_vessel = OwnVessel(
+        vessel_id="OWN_MULTI",
         lat=51.5000, lon=-0.1000,
         course=45, speed=12,
         vessel_type=VesselType.POWER_DRIVEN

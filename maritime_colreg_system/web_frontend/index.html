@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>МППСС-72: Система Расхождения Судов</title>
+    
+    <!-- Leaflet CSS для карт -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+        }
+        
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+        
+        #map {
+            flex: 1;
+            height: 100%;
+        }
+        
+        .sidebar {
+            width: 400px;
+            background: #16213e;
+            padding: 20px;
+            overflow-y: auto;
+            border-left: 2px solid #0f3460;
+        }
+        
+        .sidebar h1 {
+            color: #e94560;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+        
+        .sidebar h2 {
+            color: #0f3460;
+            background: #e94560;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 20px 0 10px 0;
+            font-size: 1.1em;
+        }
+        
+        .vessel-card {
+            background: #0f3460;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-left: 4px solid #e94560;
+        }
+        
+        .vessel-card.own-vessel {
+            border-left-color: #4ade80;
+        }
+        
+        .vessel-card.high-risk {
+            border-left-color: #ef4444;
+            animation: pulse 2s infinite;
+        }
+        
+        .vessel-card.medium-risk {
+            border-left-color: #f59e0b;
+        }
+        
+        .vessel-card.low-risk {
+            border-left-color: #4ade80;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        
+        .vessel-name {
+            font-weight: bold;
+            color: #fff;
+            margin-bottom: 8px;
+        }
+        
+        .vessel-info {
+            font-size: 0.9em;
+            color: #aaa;
+            line-height: 1.6;
+        }
+        
+        .vessel-info span {
+            color: #4ade80;
+        }
+        
+        .decision-box {
+            background: #1a1a2e;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 10px;
+        }
+        
+        .decision-maneuver {
+            color: #e94560;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        
+        .signal-indicator {
+            display: inline-block;
+            background: #e94560;
+            color: white;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-size: 0.8em;
+            margin: 2px;
+        }
+        
+        .stats-panel {
+            background: #0f3460;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 5px 0;
+        }
+        
+        .stat-value {
+            color: #4ade80;
+            font-weight: bold;
+        }
+        
+        .legend {
+            background: #0f3460;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 8px 0;
+            font-size: 0.9em;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 3px;
+            margin-right: 10px;
+        }
+        
+        .control-panel {
+            background: #0f3460;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        
+        button {
+            background: #e94560;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 1em;
+        }
+        
+        button:hover {
+            background: #ff6b6b;
+        }
+        
+        button:disabled {
+            background: #555;
+            cursor: not-allowed;
+        }
+        
+        .tcpa-dcpa {
+            display: flex;
+            justify-content: space-between;
+            background: #1a1a2e;
+            padding: 8px;
+            border-radius: 5px;
+            margin-top: 8px;
+        }
+        
+        .tcpa-dcpa div {
+            text-align: center;
+        }
+        
+        .tcpa-dcpa .label {
+            font-size: 0.8em;
+            color: #888;
+        }
+        
+        .tcpa-dcpa .value {
+            font-size: 1.1em;
+            font-weight: bold;
+        }
+        
+        .tcpa-dcpa .value.danger {
+            color: #ef4444;
+        }
+        
+        .tcpa-dcpa .value.warning {
+            color: #f59e0b;
+        }
+        
+        .tcpa-dcpa .value.safe {
+            color: #4ade80;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="map"></div>
+        <div class="sidebar">
+            <h1>🚢 МППСС-72: Система Расхождения</h1>
+            
+            <div class="control-panel">
+                <button id="btnStart">▶ Запуск</button>
+                <button id="btnPause">⏸ Пауза</button>
+                <button id="btnReset">🔄 Сброс</button>
+            </div>
+            
+            <div class="stats-panel">
+                <h2>📊 Статистика</h2>
+                <div class="stat-row">
+                    <span>Время симуляции:</span>
+                    <span class="stat-value" id="simTime">0:00</span>
+                </div>
+                <div class="stat-row">
+                    <span>Судов в районе:</span>
+                    <span class="stat-value" id="vesselCount">0</span>
+                </div>
+                <div class="stat-row">
+                    <span>Высокий риск:</span>
+                    <span class="stat-value" id="highRiskCount" style="color: #ef4444;">0</span>
+                </div>
+                <div class="stat-row">
+                    <span>Принято решений:</span>
+                    <span class="stat-value" id="decisionCount">0</span>
+                </div>
+            </div>
+            
+            <div id="vesselsList">
+                <h2>🛳 Судна</h2>
+                <!-- Карточки судов будут добавлены динамически -->
+            </div>
+            
+            <div class="legend">
+                <h2>📍 Условные обозначения</h2>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #4ade80;"></div>
+                    <span>Наше судно</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #e94560;"></div>
+                    <span>Судно с высоким риском</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #f59e0b;"></div>
+                    <span>Судно со средним риском</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #4ade80;"></div>
+                    <span>Судно с низким риском</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <script>
+        // Глобальные переменные
+        let map = null;
+        let ownMarker = null;
+        let targetMarkers = {};
+        let riskLines = {};
+        let simulationInterval = null;
+        let simulationTime = 0;
+        let isRunning = false;
+        
+        // Инициализация карты
+        function initMap() {
+            map = L.map('map').setView([44.95, 37.50], 10);
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+            
+            // Создаем маркер нашего судна
+            ownMarker = L.marker([44.95, 37.50]).addTo(map);
+            ownMarker.bindPopup('<b>НАШЕ СУДНО</b>').openPopup();
+        }
+        
+        // Обновление маркера нашего судна
+        function updateOwnVessel(lat, lon, course) {
+            if (ownMarker) {
+                ownMarker.setLatLng([lat, lon]);
+                
+                // Поворот иконки по курсу (упрощенно)
+                const icon = ownMarker.getElement();
+                if (icon) {
+                    icon.style.transform = `rotate(${course}deg)`;
+                }
+            }
+        }
+        
+        // Обновление или создание маркера цели
+        function updateTargetVessel(vessel) {
+            const markerId = `target_${vessel.id}`;
+            
+            if (!targetMarkers[markerId]) {
+                // Создаем новый маркер
+                const marker = L.marker([vessel.lat, vessel.lon]).addTo(map);
+                targetMarkers[markerId] = marker;
+            }
+            
+            // Обновляем позицию
+            targetMarkers[markerId].setLatLng([vessel.lat, vessel.lon]);
+            
+            // Обновляем popup
+            const popupContent = createVesselPopup(vessel);
+            targetMarkers[markerId].bindPopup(popupContent);
+        }
+        
+        // Создание popup для судна
+        function createVesselPopup(vessel) {
+            let riskClass = vessel.risk === 'high' ? 'danger' : vessel.risk === 'medium' ? 'warning' : 'safe';
+            
+            return `
+                <div style="min-width: 200px;">
+                    <b>${vessel.name || 'Судно #' + vessel.id}</b><br/>
+                    Тип: ${vessel.vessel_type}<br/>
+                    Курс: <span style="color: #4ade80;">${vessel.course.toFixed(1)}°</span><br/>
+                    Скорость: <span style="color: #4ade80;">${vessel.speed.toFixed(1)} уз</span>
+                    <div class="tcpa-dcpa">
+                        <div>
+                            <div class="label">TCPA</div>
+                            <div class="value ${riskClass}">${vessel.tcpa !== undefined ? vessel.tcpa.toFixed(1) : '--'} мин</div>
+                        </div>
+                        <div>
+                            <div class="label">DCPA</div>
+                            <div class="value ${riskClass}">${vessel.dcpa !== undefined ? vessel.dcpa.toFixed(0) : '--'} м</div>
+                        </div>
+                    </div>
+                    ${vessel.decision ? `<div style="margin-top: 10px; color: #e94560;"><b>Решение:</b><br/>${vessel.decision}</div>` : ''}
+                    ${vessel.signals && vessel.signals.length > 0 ? `<div style="margin-top: 5px;">${vessel.signals.map(s => `<span class="signal-indicator">${s.pattern}</span>`).join('')}</div>` : ''}
+                </div>
+            `;
+        }
+        
+        // Удаление старых маркеров
+        function removeOldTargets(activeIds) {
+            for (const markerId in targetMarkers) {
+                const id = parseInt(markerId.replace('target_', ''));
+                if (!activeIds.includes(id)) {
+                    map.removeLayer(targetMarkers[markerId]);
+                    delete targetMarkers[markerId];
+                }
+            }
+        }
+        
+        // Обновление списка судов в sidebar
+        function updateVesselsList(ownVessel, targets) {
+            const container = document.getElementById('vesselsList');
+            
+            let html = '<h2>🛳 Судна</h2>';
+            
+            // Наше судно
+            html += `
+                <div class="vessel-card own-vessel">
+                    <div class="vessel-name">🚢 НАШЕ СУДНО</div>
+                    <div class="vessel-info">
+                        Координаты: <span>${ownVessel.lat.toFixed(4)}, ${ownVessel.lon.toFixed(4)}</span><br/>
+                        Курс: <span>${ownVessel.course.toFixed(1)}°</span><br/>
+                        Скорость: <span>${ownVessel.speed.toFixed(1)} уз</span>
+                    </div>
+                </div>
+            `;
+            
+            // Целевые суда
+            targets.forEach(vessel => {
+                const riskClass = vessel.risk || 'low';
+                const decisionText = vessel.decision ? vessel.decision.substring(0, 50) + '...' : 'Наблюдение';
+                
+                html += `
+                    <div class="vessel-card ${riskClass}-risk">
+                        <div class="vessel-name">${vessel.name || 'Судно #' + vessel.id}</div>
+                        <div class="vessel-info">
+                            Тип: ${vessel.vessel_type}<br/>
+                            Дистанция: <span>${vessel.distance !== undefined ? vessel.distance.toFixed(0) : '--'} м</span><br/>
+                            Пеленг: <span>${vessel.bearing !== undefined ? vessel.bearing.toFixed(1) : '--'}°</span><br/>
+                            TCPA: <span style="color: ${vessel.tcpa < 12 && vessel.tcpa > 0 ? '#ef4444' : '#4ade80'}">${vessel.tcpa !== undefined ? vessel.tcpa.toFixed(1) : '--'} мин</span><br/>
+                            DCPA: <span style="color: ${vessel.dcpa < 500 ? '#ef4444' : '#4ade80'}">${vessel.dcpa !== undefined ? vessel.dcpa.toFixed(0) : '--'} м</span>
+                        </div>
+                        <div class="decision-box">
+                            <div class="decision-maneuver">${decisionText}</div>
+                            ${vessel.signals && vessel.signals.length > 0 ? 
+                                vessel.signals.map(s => `<span class="signal-indicator">${s.pattern} ${s.description}</span>`).join('') 
+                                : ''}
+                        </div>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+        }
+        
+        // Обновление статистики
+        function updateStats(vesselsCount, highRiskCount, decisionCount) {
+            document.getElementById('vesselCount').textContent = vesselsCount;
+            document.getElementById('highRiskCount').textContent = highRiskCount;
+            document.getElementById('decisionCount').textContent = decisionCount;
+        }
+        
+        // Форматирование времени
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+        
+        // Обновление времени симуляции
+        function updateSimTime() {
+            document.getElementById('simTime').textContent = formatTime(simulationTime);
+        }
+        
+        // Загрузка данных от сервера
+        async function loadSimulationData() {
+            try {
+                const response = await fetch('/api/simulation/state');
+                if (!response.ok) throw new Error('Network error');
+                
+                const data = await response.json();
+                
+                // Обновляем наше судно
+                updateOwnVessel(data.own_vessel.lat, data.own_vessel.lon, data.own_vessel.course);
+                
+                // Обновляем цели
+                data.targets.forEach(vessel => {
+                    updateTargetVessel(vessel);
+                });
+                
+                // Удаляем старые цели
+                const activeIds = data.targets.map(t => t.id);
+                removeOldTargets(activeIds);
+                
+                // Обновляем UI
+                updateVesselsList(data.own_vessel, data.targets);
+                updateStats(
+                    data.targets.length + 1,
+                    data.targets.filter(t => t.risk === 'high').length,
+                    data.decisions_count
+                );
+                updateSimTime();
+                
+            } catch (error) {
+                console.error('Ошибка загрузки данных:', error);
+            }
+        }
+        
+        // Управление симуляцией
+        function startSimulation() {
+            if (!isRunning) {
+                isRunning = true;
+                simulationInterval = setInterval(() => {
+                    simulationTime += 1;
+                    loadSimulationData();
+                }, 1000); // Обновление каждую секунду
+                
+                document.getElementById('btnStart').disabled = true;
+                document.getElementById('btnPause').disabled = false;
+            }
+        }
+        
+        function pauseSimulation() {
+            isRunning = false;
+            clearInterval(simulationInterval);
+            
+            document.getElementById('btnStart').disabled = false;
+            document.getElementById('btnPause').disabled = true;
+        }
+        
+        function resetSimulation() {
+            pauseSimulation();
+            simulationTime = 0;
+            
+            // Очищаем маркеры
+            for (const markerId in targetMarkers) {
+                map.removeLayer(targetMarkers[markerId]);
+            }
+            targetMarkers = {};
+            
+            // Сбрасываем UI
+            document.getElementById('vesselsList').innerHTML = '<h2>🛳 Судна</h2>';
+            updateStats(1, 0, 0);
+            updateSimTime();
+            
+            // Перезагружаем начальное состояние
+            loadSimulationData();
+        }
+        
+        // Инициализация при загрузке страницы
+        document.addEventListener('DOMContentLoaded', () => {
+            initMap();
+            
+            // Навешиваем обработчики
+            document.getElementById('btnStart').addEventListener('click', startSimulation);
+            document.getElementById('btnPause').addEventListener('click', pauseSimulation);
+            document.getElementById('btnReset').addEventListener('click', resetSimulation);
+            
+            // Начальная загрузка
+            loadSimulationData();
+            
+            // Отключаем кнопку паузы initially
+            document.getElementById('btnPause').disabled = true;
+        });
+    </script>
+</body>
+</html>

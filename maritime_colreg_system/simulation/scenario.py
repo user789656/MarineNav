@@ -6,7 +6,7 @@
 import random
 import math
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from ..core import GeoPosition
 from ..decision_maker import VesselType
 
@@ -21,6 +21,7 @@ class SimulatedVessel:
     vessel_type: VesselType
     length: float = 50.0  # метров
     name: str = ""
+    destination: Optional[GeoPosition] = None  # Целевая точка назначения
     
     def update_position(self, time_delta_minutes: float):
         """
@@ -32,6 +33,11 @@ class SimulatedVessel:
         distance_m = self.speed * 1852 / 60 * time_delta_minutes
         self.pos = self.pos.offset_by(distance_m, self.course)
     
+    def update_course_to_destination(self):
+        """Обновляет курс для движения к целевой точке."""
+        if self.destination:
+            self.course = self.pos.bearing_to(self.destination)
+    
     def to_dict(self) -> dict:
         """Преобразует судно в словарь для JSON сериализации."""
         return {
@@ -42,7 +48,8 @@ class SimulatedVessel:
             "course": self.course,
             "vessel_type": self.vessel_type.name,
             "length": self.length,
-            "name": self.name
+            "name": self.name,
+            "destination": {"lat": self.destination.lat, "lon": self.destination.lon} if self.destination else None
         }
 
 
@@ -70,41 +77,98 @@ class ScenarioGenerator:
         "MARITIME SPIRIT", "HARBOR GUARDIAN", "WAVE RIDER", "STORM CHASER"
     ]
     
-    def __init__(self, seed: Optional[int] = None):
+    # Границы морских зон (упрощенно - прямоугольные области воды)
+    # Формат: (min_lat, max_lat, min_lon, max_lon)
+    WATER_ZONES = [
+        # Черное море near Новороссийск
+        (44.5, 45.2, 37.0, 38.5),
+        # Средиземное море
+        (35.0, 36.5, 28.0, 30.0),
+        # Балтийское море
+        (54.0, 56.0, 19.0, 21.0),
+    ]
+    
+    def __init__(self, seed: Optional[int] = None, water_zone_index: int = 0):
         """
         Инициализация генератора.
         
         :param seed: Seed для воспроизводимости (None для случайности)
+        :param water_zone_index: Индекс морской зоны для генерации
         """
         if seed is not None:
             random.seed(seed)
+        self.water_zone = self.WATER_ZONES[water_zone_index % len(self.WATER_ZONES)]
+    
+    def _is_in_water(self, lat: float, lon: float) -> bool:
+        """Проверяет, находится ли точка в воде (в пределах морской зоны)."""
+        min_lat, max_lat, min_lon, max_lon = self.water_zone
+        return min_lat <= lat <= max_lat and min_lon <= lon <= max_lon
+    
+    def _generate_water_position(self, center_lat: float, center_lon: float, 
+                                   max_distance_nm: float) -> GeoPosition:
+        """Генерирует случайную позицию в воде."""
+        max_attempts = 50
+        for _ in range(max_attempts):
+            # Генерируем случайную позицию в пределах зоны
+            lat = random.uniform(self.water_zone[0], self.water_zone[1])
+            lon = random.uniform(self.water_zone[2], self.water_zone[3])
+            
+            if self._is_in_water(lat, lon):
+                return GeoPosition(lat=lat, lon=lon)
+        
+        # Если не удалось сгенерировать, возвращаем точку в центре зоны
+        center_lat = (self.water_zone[0] + self.water_zone[1]) / 2
+        center_lon = (self.water_zone[2] + self.water_zone[3]) / 2
+        return GeoPosition(lat=center_lat, lon=center_lon)
     
     def generate_own_vessel(
         self,
         start_lat: float = 44.95,  # Пример: Новороссийск
         start_lon: float = 37.50,
-        speed_range: tuple = (10.0, 15.0)
+        speed_range: tuple = (10.0, 15.0),
+        destination_lat: Optional[float] = None,
+        destination_lon: Optional[float] = None
     ) -> SimulatedVessel:
         """
-        Генерирует наше судно.
+        Генерирует наше судно с целевой точкой назначения.
         
         :param start_lat: Начальная широта
         :param start_lon: Начальная долгота
         :param speed_range: Диапазон скорости (мин, макс)
+        :param destination_lat: Широта цели (если None, генерируется автоматически)
+        :param destination_lon: Долгота цели (если None, генерируется автоматически)
         :return: SimulatedVessel для нашего судна
         """
         speed = random.uniform(*speed_range)
-        course = random.uniform(0, 360)
         
-        return SimulatedVessel(
+        # Если цель не задана, генерируем её в пределах морской зоны
+        if destination_lat is None or destination_lon is None:
+            # Цель должна быть на расстоянии 20-50 миль от старта
+            dest_bearing = random.uniform(0, 360)
+            dest_distance_m = random.uniform(20 * 1852, 50 * 1852)
+            dest_pos = GeoPosition(lat=start_lat, lon=start_lon).offset_by(dest_distance_m, dest_bearing)
+            
+            # Убедимся, что цель в воде
+            if not self._is_in_water(dest_pos.lat, dest_pos.lon):
+                dest_pos = self._generate_water_position(start_lat, start_lon, 50)
+        else:
+            dest_pos = GeoPosition(lat=destination_lat, lon=destination_lon)
+        
+        # Начальный курс к цели
+        initial_course = GeoPosition(lat=start_lat, lon=start_lon).bearing_to(dest_pos)
+        
+        vessel = SimulatedVessel(
             id=0,
             pos=GeoPosition(lat=start_lat, lon=start_lon),
             speed=speed,
-            course=course,
+            course=initial_course,
             vessel_type=VesselType.POWER_DRIVEN,
             length=150.0,
-            name="OUR VESSEL"
+            name="OUR VESSEL",
+            destination=dest_pos
         )
+        
+        return vessel
     
     def generate_target_vessel(
         self,
@@ -134,8 +198,8 @@ class ScenarioGenerator:
             distance_m = random.uniform(max_distance_m * 0.3, max_distance_m)
             bearing = random.uniform(0, 360)
         
-        # Позиция цели
-        target_pos = own_vessel.pos.offset_by(distance_m, bearing % 360)
+        # Позиция цели - генерируем только в воде
+        target_pos = self._generate_water_position(own_vessel.pos.lat, own_vessel.pos.lon, max_distance_nm)
         
         # Выбор типа судна
         type_weights = [
@@ -155,14 +219,22 @@ class ScenarioGenerator:
         # Скорость цели
         speed = random.uniform(5.0, 20.0)
         
-        # Курс цели
+        # Курс цели - также с целевой точкой
         if create_risk:
-            # Создаем коллизионный курс
-            # Цель должна двигаться так, чтобы TCPA был положительным и малым
+            # Создаем коллизионный курс - цель движется к нашему судну или пересекает курс
             reciprocal_course = (own_vessel.course + 180) % 360
             course = reciprocal_course + random.uniform(-15, 15)
         else:
             course = random.uniform(0, 360)
+        
+        # Генерируем целевую точку для другого судна
+        dest_bearing = random.uniform(0, 360)
+        dest_distance_m = random.uniform(30 * 1852, 80 * 1852)
+        dest_pos = target_pos.offset_by(dest_distance_m, dest_bearing)
+        
+        # Убедимся, что цель в воде
+        if not self._is_in_water(dest_pos.lat, dest_pos.lon):
+            dest_pos = self._generate_water_position(target_pos.lat, target_pos.lon, 50)
         
         # Длина судна в зависимости от типа
         length_map = {
@@ -183,7 +255,8 @@ class ScenarioGenerator:
             course=course,
             vessel_type=vessel_type,
             length=length_map[vessel_type],
-            name=name
+            name=name,
+            destination=dest_pos
         )
     
     def generate_scenario(
@@ -229,16 +302,22 @@ class ScenarioGenerator:
     ):
         """
         Обновляет позиции всех судов в сценарии.
+        Судна движутся к своим целевым точкам, но при маневрах расхождения
+        временно отклоняются от курса к цели.
         
         :param own_vessel: Наше судно
         :param targets: Список целевых судов
         :param time_delta_minutes: Шаг времени в минутах
         """
-        # Обновляем наше судно
+        # Обновляем наше судно - оно всегда стремится к цели
+        # Сначала обновляем курс к цели (если нет активного маневра расхождения)
+        own_vessel.update_course_to_destination()
         own_vessel.update_position(time_delta_minutes)
         
-        # Обновляем цели
+        # Обновляем цели - они также движутся к своим целям
         for target in targets:
+            # Цели также стремятся к своим целям
+            target.update_course_to_destination()
             target.update_position(time_delta_minutes)
     
     def apply_decision_to_vessel(
@@ -249,6 +328,7 @@ class ScenarioGenerator:
     ):
         """
         Применяет решение к судну (изменяет курс/скорость).
+        После маневра расхождения судно вернется к курсу на цель.
         
         :param vessel: Судно
         :param new_course: Новый курс или None

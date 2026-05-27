@@ -305,11 +305,16 @@
                 attribution: '© OpenStreetMap contributors'
             }).addTo(map);
             
-            // Создаем маркер нашего судна
-            ownMarker = L.marker([44.95, 37.50]).addTo(map);
+            // Создаем маркер нашего судна с кастомной иконкой
+            const ownIcon = L.divIcon({
+                className: 'own-vessel-icon',
+                html: '<div style="background: #4ade80; width: 20px; height: 20px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 0 10px rgba(74,222,128,0.8);"></div>',
+                iconSize: [26, 26],
+                iconAnchor: [13, 13]
+            });
+            
+            ownMarker = L.marker([44.95, 37.50], {icon: ownIcon}).addTo(map);
             ownMarker.bindPopup('<b>НАШЕ СУДНО</b>').openPopup();
-        }
-        
         // Обновление маркера нашего судна
         function updateOwnVessel(lat, lon, course) {
             if (ownMarker) {
@@ -448,21 +453,42 @@
             try {
                 const response = await fetch('/api/simulation/state');
                 if (!response.ok) throw new Error('Network error');
-                
+
                 const data = await response.json();
-                
+
                 // Обновляем наше судно
                 updateOwnVessel(data.own_vessel.lat, data.own_vessel.lon, data.own_vessel.course);
-                
+
+                // Рисуем линию к цели нашего судна
+                if (data.own_vessel.destination) {
+                    drawDestinationLine(
+                        [data.own_vessel.lat, data.own_vessel.lon],
+                        [data.own_vessel.destination.lat, data.own_vessel.destination.lon],
+                        'own-destination-line'
+                    );
+                }
+
                 // Обновляем цели
                 data.targets.forEach(vessel => {
                     updateTargetVessel(vessel);
+                    
+                    // Рисуем линию к цели каждого судна
+                    if (vessel.destination) {
+                        drawDestinationLine(
+                            [vessel.lat, vessel.lon],
+                            [vessel.destination.lat, vessel.destination.lon],
+                            `target-${vessel.id}-route`
+                        );
+                    }
                 });
-                
+
                 // Удаляем старые цели
                 const activeIds = data.targets.map(t => t.id);
                 removeOldTargets(activeIds);
                 
+                // Удаляем старые линии маршрутов
+                cleanupRoutes(activeIds, data.own_vessel.destination !== null);
+
                 // Обновляем UI
                 updateVesselsList(data.own_vessel, data.targets);
                 updateStats(
@@ -471,11 +497,50 @@
                     data.decisions_count
                 );
                 updateSimTime();
-                
+
             } catch (error) {
                 console.error('Ошибка загрузки данных:', error);
             }
         }
+        
+        // Хранилище для линий маршрутов
+        let routeLines = {};
+        
+        // Рисование линии маршрута к цели
+        function drawDestinationLine(startPos, endPos, lineId) {
+            // Удаляем старую линию если есть
+            if (routeLines[lineId]) {
+                map.removeLayer(routeLines[lineId]);
+            }
+            
+            // Рисуем новую линию
+            const line = L.polyline([startPos, endPos], {
+                color: lineId === 'own-destination-line' ? '#4ade80' : '#f59e0b',
+                weight: 2,
+                opacity: 0.6,
+                dashArray: '10, 10'
+            }).addTo(map);
+            
+            routeLines[lineId] = line;
+        }
+        
+        // Очистка старых линий маршрутов
+        function cleanupRoutes(activeTargetIds, hasOwnDestination) {
+            // Очищаем линии целей
+            for (const lineId in routeLines) {
+                if (lineId.startsWith('target-')) {
+                    const targetId = parseInt(lineId.split('-')[1]);
+                    if (!activeTargetIds.includes(targetId)) {
+                        map.removeLayer(routeLines[lineId]);
+                        delete routeLines[lineId];
+                    }
+                } else if (lineId === 'own-destination-line' && !hasOwnDestination) {
+                    map.removeLayer(routeLines[lineId]);
+                    delete routeLines[lineId];
+                }
+            }
+        }
+
         
         // Управление симуляцией
         function startSimulation() {

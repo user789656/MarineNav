@@ -32,13 +32,16 @@ class SimulationState:
         self.generator = ScenarioGenerator(seed=None)
         self.decision_maker = COLREGDecisionMaker(VesselType.POWER_DRIVEN)
         
-        # Генерируем начальный сценарий
+        # Генерируем начальный сценарий с целевой точкой
         self.own_vessel, self.targets = self.generator.generate_scenario(
             start_lat=44.95,
             start_lon=37.50,
             num_targets=6,
             create_risks=True
         )
+        
+        # Сохраняем активные маневры расхождения (время до возврата к цели)
+        self.active_maneuvers = {}  # {target_id: {"course": float, "timer": int}}
         
         self.simulation_time = 0
         self.decisions_count = 0
@@ -48,8 +51,8 @@ class SimulationState:
         """Обновляет состояние симуляции."""
         self.simulation_time += time_delta_minutes
         
-        # Обновляем позиции всех судов
-        self.generator.update_scenario(self.own_vessel, self.targets, time_delta_minutes)
+        # Проверяем активные маневры и возвращаемся к цели если маневр завершен
+        self._check_maneuver_completion()
         
         # Принимаем решения для каждой цели
         for target in self.targets:
@@ -66,12 +69,20 @@ class SimulationState:
             
             # Применяем решение к нашему судну (если высокий риск)
             if decision.risk_level == "high" and decision.new_course is not None:
-                # Плавно изменяем курс
+                # Сохраняем активный маневр
+                self.active_maneuvers[target.id] = {
+                    "course": decision.new_course,
+                    "timer": 10  # 10 минут маневра
+                }
+                # Применяем курс маневра
                 self.own_vessel.course = decision.new_course
                 self.decisions_count += 1
             
             # Сохраняем решение в объекте цели для отображения
             target.current_decision = decision
+        
+        # Обновляем позиции всех судов (с учетом курса к цели)
+        self.generator.update_scenario(self.own_vessel, self.targets, time_delta_minutes)
         
         # Удаляем ушедшие суда и добавляем новые
         self.targets = self.generator.remove_passed_vessels(
@@ -80,6 +91,19 @@ class SimulationState:
         self.targets = self.generator.spawn_new_vessels(
             self.own_vessel, self.targets, min_targets=4, max_targets=8
         )
+    
+    def _check_maneuver_completion(self):
+        """Проверяет завершение маневров и уменьшает таймеры."""
+        completed = []
+        
+        for target_id, maneuver in self.active_maneuvers.items():
+            maneuver["timer"] -= 1
+            if maneuver["timer"] <= 0:
+                completed.append(target_id)
+        
+        # Удаляем завершенные маневры - судно автоматически вернется к цели
+        for target_id in completed:
+            del self.active_maneuvers[target_id]
     
     def get_state_dict(self) -> Dict[str, Any]:
         """Возвращает состояние как словарь для JSON."""
@@ -119,7 +143,11 @@ class SimulationState:
                         "type": s.signal_type
                     }
                     for s in decision.signals
-                ] if decision and decision.signals else []
+                ] if decision and decision.signals else [],
+                "destination": {
+                    "lat": target.destination.lat,
+                    "lon": target.destination.lon
+                } if target.destination else None
             }
             targets_data.append(target_data)
         
@@ -131,7 +159,11 @@ class SimulationState:
                 "lon": self.own_vessel.pos.lon,
                 "speed": self.own_vessel.speed,
                 "course": self.own_vessel.course,
-                "vessel_type": "POWER_DRIVEN"
+                "vessel_type": "POWER_DRIVEN",
+                "destination": {
+                    "lat": self.own_vessel.destination.lat,
+                    "lon": self.own_vessel.destination.lon
+                } if self.own_vessel.destination else None
             },
             "targets": targets_data,
             "simulation_time": self.simulation_time,
